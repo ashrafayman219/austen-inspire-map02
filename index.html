@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GIS | SWater</title>
+  <!-- <script type="module" src="https://js.arcgis.com/calcite-components/3.1.0/calcite.esm.js"></script> -->
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.4.0/Chart.min.js"></script>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://js.arcgis.com/4.31/"></script>
+</head>
+
+<body>
+  <!-- Preloader -->
+  <div id="preloader">
+    <div class="sk-cube-grid">
+      <div class="sk-cube sk-cube1"></div>
+      <div class="sk-cube sk-cube2"></div>
+      <div class="sk-cube sk-cube3"></div>
+      <div class="sk-cube sk-cube4"></div>
+      <div class="sk-cube sk-cube5"></div>
+      <div class="sk-cube sk-cube6"></div>
+      <div class="sk-cube sk-cube7"></div>
+      <div class="sk-cube sk-cube8"></div>
+      <div class="sk-cube sk-cube9"></div>
+    </div>
+  </div>
+
+  <div id="container">
+    <div id="sidebar">
+      <div id="title">
+        <div class="logo-container">
+          <img src="./1200px-Jata_MalaysiaV2.svg.png" alt="Jata_MalaysiaV2" class="logo" />
+          <img
+            src="./kisspng-jabatan-air-negeri-sabah-water-department-malaysia-police-malaysia-5b0be841d040f2.638208291527507009853.png"
+            alt="kisspng-jabatan-air-negeri-sabah-water-department-malaysia-police-malaysia" class="logo" />
+          <img src="./SMJ logo (white round)-01.png" alt="HALA TUJU.SABAH MAJU JAYA" class="logo" />
+        </div>
+        <p>
+          <strong>JABATAN AIR NEGERI SABAH</strong><br />
+          <span>Geographical Information System</span>
+        </p>
+        <!-- <hr /> -->
+      </div>
+<div class="region-selector">
+    <div class="label-column">
+        <label>Regions:</label>
+    </div>
+    <div class="select-wrapper">
+        <div class="select-container">
+            <div class="selected-display" id="selectedDisplay">
+                Select regions...
+            </div>
+            <div class="selection-count" id="selectionCount"></div>
+            <div class="dropdown-list" id="regionDropdown">
+                <div class="search-box">
+                    <input type="text" placeholder="Search regions..." id="regionSearch">
+                </div>
+                <div class="options-container" id="regionOptions"></div>
+                <!-- Add the button here -->
+                <div class="dropdown-footer">
+                    <button id="loadRegionsButton" class="load-button" disabled>
+                        Load
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="selected-tags" id="selectedRegions"></div>
+    </div>
+</div>
+      <div id="layerListSection">
+        <h3>Map Layers</h3>
+        <div id="layerListContainer"></div>
+      </div>
+      <div id="legendSection">
+        <h3>Legend / Feature Count</h3>
+        <div id="legendContainer"></div>
+      </div>
+      <!-- Add more sections as needed -->
+
+      <calcite-button id="thematicButton" appearance="outline-fill" icon-start="classify-pixels" kind="neutral"
+        label="Display Thematics" split-child="primary"></calcite-button>
+
+      <div id="thematicPopup" class="thematic-popup">
+        <div class="thematic-popup-header">
+          <h3>Thematic Analysis</h3>
+          <button class="close-button" id="closeThematicPopup">×</button>
+        </div>
+        <div class="thematic-popup-content">
+          <div class="thematic-section">
+            <label for="thematicLayerSelect">Select a Layer</label>
+            <select id="thematicLayerSelect" class="thematic-select">
+              <option value="none">None</option>
+              <!-- Layers will be added dynamically -->
+            </select>
+          </div>
+          <div class="thematic-section">
+            <label for="thematicThemeSelect">Select a Theme</label>
+            <select id="thematicThemeSelect" class="thematic-select" disabled>
+              <option value="default">Default</option>
+              <!-- Themes will be added dynamically -->
+            </select>
+          </div>
+
+          <!-- Add the theme legend button -->
+          <div class="thematic-section">
+            <button id="themeLegendBtn" class="theme-legend-button" disabled>
+              Theme Legend
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="displayMap"></div>
+    <!-- Logo in Top-Right -->
+    <div id="logoDiv">
+      <img src="./logo1R.png" alt="Our Software Logo" />
+    </div>
+  </div>
+
+  <!-- Add the theme legend popup -->
+  <div id="themeLegendPopup" class="theme-legend-popup">
+    <div class="theme-legend-header">
+      <h3>Theme Legend</h3>
+      <button class="close-button" id="closeLegendPopup">×</button>
+    </div>
+    <div class="theme-legend-content">
+      <div class="legend-info">
+        <div class="legend-header">
+          <span>Layer: </span><span id="legendLayerName"></span>
+          <br />
+          <span>Theme: </span><span id="legendThemeName"></span>
+        </div>
+        <table class="legend-table">
+          <thead>
+            <tr>
+              <th>Colour</th>
+              <th>Description</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody id="legendTableBody">
+            <!-- Legend items will be added here dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add this right after your theme-legend-popup div -->
+  <div class="theme-legend-backdrop"></div>
+
+  <!-- Add this to your HTML -->
+  <div id="selectByAttributesModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Select By Attributes</h3>
+        <span class="close-button">&times;</span>
+      </div>
+      <!-- Add search widget container
+        <div class="query-line">
+          <span class="query-label">Search</span>
+          Container will be created dynamically
+        </div> -->
+
+
+      <!-- Inside the modal-content div, replace the current modal-body -->
+      <div class="modal-body">
+        <div class="query-line">
+          <span class="query-label">Search</span>
+          <select id="fieldSelect1" class="query-select full-width">
+              <option value="">Select a field</option>
+          </select>
+          <select id="operatorSelect1" class="query-select">
+              <option value="=">=</option>
+              <option value="<>">≠</option>
+              <option value=">">></option>
+              <option value="<"><</option>
+              <option value=">=">=</option>
+              <option value="<="><=</option>
+          </select>
+          <div class="value-container">
+              <input type="text" id="valueInput1" class="query-input" placeholder="Enter value" style="display: none;">
+              <select id="valueSelect1" class="query-select" style="display: none;">
+                  <option value="">Select a value</option>
+              </select>
+          </div>
+        </div>
+
+        <!-- Add these new divs -->
+        <div class="query-line" id="logicalOperatorLine" style="display: none;">
+          <select id="logicalOperator" class="query-select">
+            <option value="AND">AND</option>
+            <option value="OR">OR</option>
+          </select>
+        </div>
+
+        <div class="query-line" id="secondQueryLine" style="display: none;">
+          <span class="query-label">Search</span>
+          <select id="fieldSelect2" class="query-select full-width">
+              <option value="">Select a field</option>
+          </select>
+          <select id="operatorSelect2" class="query-select">
+              <option value="=">=</option>
+              <option value="<>">≠</option>
+              <option value=">">></option>
+              <option value="<"><</option>
+              <option value=">=">=</option>
+              <option value="<="><=</option>
+          </select>
+          <div class="value-container">
+              <input type="text" id="valueInput2" class="query-input" placeholder="Enter value" style="display: none;">
+              <select id="valueSelect2" class="query-select" style="display: none;">
+                  <option value="">Select a value</option>
+              </select>
+          </div>
+        </div>
+
+        <div class="query-line">
+          <button id="addCriteria" class="btn btn-secondary">Add Criteria</button>
+        </div>
+
+        <!-- Error message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+          <span class="error-icon">⚠️</span>
+          <span id="errorText"></span>
+        </div>
+
+        <!-- Loading indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+          <div class="spinner"></div>
+          <span>Processing...</span>
+        </div>
+      </div>
+
+
+      <div class="modal-footer">
+        <button id="applySelection" class="btn btn-primary">Apply</button>
+        <button id="clearSelection" class="btn btn-secondary">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
