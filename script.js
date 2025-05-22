@@ -11990,7 +11990,23 @@ async function addWidgets() {
       const createRenderer = (themeKey, layerType) => {
         const themeConfig = THEME_CONFIG[themeKey];
 
-        if (themeKey === "dma-inflow") {
+
+
+        if (layerType === "Data Loggers" && themeKey === "hardware-alarm") {
+          // Special handling for Data Loggers hardware alarm
+          return {
+            type: "unique-value",
+            field: "Missing_Transmission",
+            defaultSymbol: THEME_CONFIG["hardware-alarm"].categories[1].symbol, // No Alarm symbol for empty values
+            uniqueValueInfos: [
+              {
+                value: "5", // Exact value of 5
+                symbol: THEME_CONFIG["hardware-alarm"].categories[0].symbol, // Alarm Triggered symbol
+                label: "Alarm Triggered",
+              },
+            ],
+          };
+        } else if (themeKey === "dma-inflow") {
           return {
             type: "unique-value",
             field: themeConfig.field,
@@ -12019,22 +12035,6 @@ async function addWidgets() {
                   return '3001 above';
               }
             `
-          };
-        }
-
-        if (layerType === "Data Loggers" && themeKey === "hardware-alarm") {
-          // Special handling for Data Loggers hardware alarm
-          return {
-            type: "unique-value",
-            field: "Missing_Transmission",
-            defaultSymbol: THEME_CONFIG["hardware-alarm"].categories[1].symbol, // No Alarm symbol for empty values
-            uniqueValueInfos: [
-              {
-                value: "5", // Exact value of 5
-                symbol: THEME_CONFIG["hardware-alarm"].categories[0].symbol, // Alarm Triggered symbol
-                label: "Alarm Triggered",
-              },
-            ],
           };
         } else if (themeKey === "nrw-percentage") {
           // Updated handling for nrw-percentage using classValue
@@ -12183,7 +12183,7 @@ async function addWidgets() {
                                 `
                             }
                         }];
-                      } else {
+                    } else {
                       sublayer.labelingInfo = [
                         labelClassDMZBoundariesNamesOnly,
                       ];
