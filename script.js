@@ -21,337 +21,577 @@ const lastSearchState = {
 
 
 
+// Add these variables at the top of your script
+const sublayerCounts = new Map(); // Track counts for individual sublayers
 
 
 
+// // Add these utility functions to your code
+// const countCache = new Map(); // Cache for feature counts
+// const pendingQueries = new Map(); // Track ongoing queries
 
-
-// Sample data for the legend with image URLs
+// Define the legend data structure
 const legendData = [
-  {
-    feature: "Customer Locations",
-    count: "#",
-    icon: "./customerlocation.png",
-  },
-  {
-    feature: "Data Loggers",
-    count: "#",
-    icon: "./dataloggers.png",
-  },
-  {
-    feature: "DMZ Boundaries",
-    count: "#",
-    icon: "./dmzboundaries.png",
-  },
-  {
-    feature: "DMZ Critical Points",
-    count: "#",
-    icon: "./criticalpoints.png",
-  },
-  {
-    feature: "DMZ Meter Points",
-    count: "#",
-    icon: "./dmz.png",
-  },
-  {
-    feature: "Reservoirs",
-    count: "#",
-    icon: "./reservoir.png",
-  },
-  {
-    feature: "SIV Meters Points",
-    count: "#",
-    icon: "./siv.png",
-  },
-  {
-    feature: "Transmission Main Meter Points",
-    count: "#",
-    icon: "./tmm.png",
-  },
-  {
-    feature: "Trunk Main Meter Points",
-    count: "#",
-    icon: "./tkm.png",
-  },
-  {
-    feature: "Valves",
-    count: "#",
-    icon: "./valves.png",
-  },
-  {
-    feature: "Water Mains",
-    count: "#",
-    icon: "./watermains.png",
-  },
-  {
-    feature: "Water Treatment Plant",
-    count: "#",
-    icon: "./wtp.png",
-  },
-  {
-    feature: "Maintenance Work Orders",
-    count: "#",
-    icon: "./workorders.png",
-  },
+  { feature: "Customer Locations", count: 0, icon: "./customerlocation.png", unit: "nos." },
+  { feature: "Data Loggers", count: 0, icon: "./dataloggers.png", unit: "nos." },
+  { feature: "DMZ Boundaries", count: 0, icon: "./dmzboundaries.png", unit: "nos." },
+  { feature: "DMZ Critical Points", count: 0, icon: "./criticalpoints.png", unit: "nos." },
+  { feature: "DMZ Meter Points", count: 0, icon: "./dmz.png", unit: "nos." },
+  { feature: "Reservoirs", count: 0, icon: "./reservoir.png", unit: "nos." },
+  { feature: "SIV Meters Points", count: 0, icon: "./siv.png", unit: "nos." },
+  { feature: "Transmission Main Meter Points", count: 0, icon: "./tmm.png", unit: "nos." },
+  { feature: "Trunk Main Meter Points", count: 0, icon: "./tkm.png", unit: "nos." },
+  { feature: "Valves", count: 0, icon: "./valves.png", unit: "nos." },
+  { feature: "Water Mains", count: 0, icon: "./watermains.png", unit: "km" },
+  { feature: "Water Treatment Plant", count: 0, icon: "./wtp.png", unit: "nos." },
+  { feature: "Maintenance Work Orders", count: 0, icon: "./workorders.png", unit: "nos." }
 ];
-function animateCount(element, targetCount, unit, duration = 1000) {
-  const startCount =
-    parseFloat(element.textContent.replace(/,/g, "").replace("#", "0")) ||
-    0;
-  const totalSteps = Math.max(duration / 100, 1); // Ensure at least one step
-  const increment = (targetCount - startCount) / totalSteps;
-  let currentCount = startCount;
-  let step = 0;
 
-  const interval = setInterval(() => {
-    step++;
-    currentCount += increment;
+// Efficient counter animation function with debouncing
+const pendingAnimations = new Map();
+// --- Global Variables (keep these at the top of your script) ---
+const countCache = new Map(); // Cache for 'getOptimizedCount' results (for full group layers)
+const pendingQueries = new Map(); // Track ongoing queries for 'getOptimizedCount'
+const sublayerIndividualCounts = new Map(); // Map<string, Map<string, number>>: parentLayerTitle -> (sublayerId -> individualSublayerCount)
+const propagatingVisibility = new Set(); // Track layers currently propagating visibility changes to avoid redundant calculations
 
-    // Clamp the current count to the target count
-    if (
-      (increment > 0 && currentCount >= targetCount) ||
-      (increment < 0 && currentCount <= targetCount)
-    ) {
-      currentCount = targetCount;
-      clearInterval(interval);
+// --- Helper Functions (keep these as they are or integrate if you have new versions) ---
+
+// This function will be called to update the legend display.
+// I'm renaming it slightly to updateCountDisplay to differentiate from internal logic,
+// but you can keep it as updateCount if you prefer, just be consistent.
+function updateCountDisplay(featureName, count, unit) {
+  const countId = featureName.replace(/\s+/g, "") + "Count";
+  const element = document.getElementById(countId);
+  
+  if (element) {
+    element.style.fontWeight = "bold"; // Ensure bold
+    
+    if (count === 0) {
+      element.textContent = "#";
+    } else if (unit === "km") {
+      element.textContent = `${count.toFixed(2).toLocaleString()} ${unit}`;
+    } else {
+      element.textContent = `${Math.round(count).toLocaleString()} ${unit}`;
     }
-
-    // Format the count for Water Mains to two decimal places
-    const formattedCount =
-      unit === "km" ? currentCount.toFixed(2) : Math.round(currentCount);
-
-    element.textContent = `${formattedCount.toLocaleString()} ${unit}`;
-
-    // If the step exceeds totalSteps, stop the animation
-    if (step >= totalSteps) {
-      clearInterval(interval);
-      const finalFormattedCount =
-        unit === "km" ? targetCount.toFixed(2) : targetCount;
-      element.textContent = `${finalFormattedCount.toLocaleString()} ${unit}`; // Ensure final value is exact
+  }
+}
+// Fix the updateCount function definition to match what you're calling
+function updateCount(featureName, count, unit) {
+  const countId = featureName.replace(/\s+/g, "") + "Count";
+  const element = document.getElementById(countId);
+  
+  if (element) {
+    element.style.fontWeight = "bold"; // Ensure bold
+    
+    if (count === 0) {
+      element.textContent = "#";
+    } else if (unit === "km") {
+      element.textContent = `${count.toFixed(2).toLocaleString()} ${unit}`;
+    } else {
+      element.textContent = `${Math.round(count).toLocaleString()} ${unit}`;
     }
-  }, 100);
+  }
+}
+// Direct test function - call this from console
+function testCount(layerName, count) {
+  const unit = layerName === "Water Mains" ? "km" : "nos.";
+  const countId = layerName.replace(/\s+/g, "") + "Count";
+  const element = document.getElementById(countId);
+  
+  console.log(`Updating element ${countId}: ${element ? "Found" : "NOT FOUND"}`);
+  
+  if (element) {
+    element.style.fontWeight = "bold";
+    if (count === 0) {
+      element.textContent = "#";
+    } else if (unit === "km") {
+      element.textContent = `${count.toFixed(2).toLocaleString()} ${unit}`;
+    } else {
+      element.textContent = `${Math.round(count).toLocaleString()} ${unit}`;
+    }
+    console.log(`Updated to: ${element.textContent}`);
+    return true;
+  }
+  return false;
 }
 
+// You can call this from the browser console:
+// testCount("Water Mains", 123.45)
+// testCount("DMZ Boundaries", 42)
+// Test if updateCount is working
+console.log("Testing updateCount...");
+setTimeout(() => {
+  updateCount("DMZ Boundaries", 42, "nos.");
+  console.log("Updated DMZ Boundaries count to 42");
+}, 2000);
 
-async function updateLegendCount(layer, layerTitle, currentCount) {
-    const matchingLegendItem = legendData.find(item => item.feature === layerTitle);
-    if (!matchingLegendItem) return;
-
-    const unit = layerTitle === "Water Mains" ? "km" : "nos.";
-    const countElement = document.getElementById(
-        matchingLegendItem.feature.replace(/\s+/g, "") + "Count"
-    );
-
-    if (!countElement) return;
-
-    try {
-        if (layer.visible) {
-            let newCount = 0;
-
-            // Add a loading indicator while counting
-            countElement.textContent = "Counting...";
-
-            if (layerTitle === "Water Mains") {
-                const query = {
-                    where: "1=1",
-                    returnGeometry: false,
-                    outFields: ["mLength"]
-                };
-                const results = await layer.queryFeatures(query);
-                newCount = results.features.reduce((total, feature) => 
-                    total + (feature.attributes.mLength || 0), 0) / 1000;
-            } else {
-                newCount = await layer.queryFeatureCount();
-            }
-
-            // Store the current count for this specific layer
-            layer.currentCount = newCount;
-
-            // Recalculate total count for this layer type
-            let totalCount = 0;
-            const parentLayer = findParentLayer(layerTitle);
-            if (parentLayer) {
-                totalCount = await calculateTotalCount(parentLayer, layerTitle);
-            }
-
-            matchingLegendItem.count = totalCount;
-            
-            if (totalCount > 0) {
-                animateCount(countElement, totalCount, unit);
-            } else {
-                matchingLegendItem.count = "#";
-                countElement.textContent = "#";
-            }
-        } else {
-            // When turning off, subtract this layer's previous count
-            if (layer.currentCount) {
-                let totalCount = matchingLegendItem.count;
-                if (totalCount !== "#") {
-                    totalCount -= layer.currentCount;
-                    if (totalCount <= 0) {
-                        matchingLegendItem.count = "#";
-                        countElement.textContent = "#";
-                    } else {
-                        matchingLegendItem.count = totalCount;
-                        const formattedCount = unit === "km" ? 
-                            totalCount.toFixed(2) : 
-                            Math.round(totalCount);
-                        countElement.textContent = `${formattedCount.toLocaleString()} ${unit}`;
-                    }
-                }
-            }
-            layer.currentCount = 0;
-        }
-    } catch (error) {
-        console.error("Error updating legend count:", error);
-        countElement.textContent = "#";
-    }
+// Check if legend elements exist with expected IDs
+setTimeout(() => {
+  legendData.forEach(item => {
+    const id = item.feature.replace(/\s+/g, "") + "Count";
+    const element = document.getElementById(id);
+    console.log(`Legend element for ${item.feature}: ${element ? "Found" : "NOT FOUND"}`);
+  });
+}, 1000);
+// Show counting indicator in bold
+function showCounting(featureName) {
+  const countId = featureName.replace(/\s+/g, "") + "Count";
+  const element = document.getElementById(countId);
+  
+  if (element) {
+    element.textContent = "Counting...";
+    element.style.fontWeight = "bold";
+  }
 }
-// Helper function to find parent layer
-function findParentLayer(layerTitle) {
-    return displayMap.layers.find(layer => layer.title === layerTitle);
-}
-// Helper function to calculate total count for a layer type
-async function calculateTotalCount(parentLayer, layerTitle) {
-    let totalCount = 0;
-    const isWaterMains = layerTitle === "Water Mains";
 
-    async function processLayer(layer) {
-        if (layer.visible) {
-            if (layer.sublayers) {
-                for (const sublayer of layer.sublayers) {
-                    if (sublayer.visible) {
-                        if (isWaterMains) {
-                            const query = {
-                                where: "1=1",
-                                returnGeometry: false,
-                                outFields: ["mLength"]
-                            };
-                            const results = await sublayer.queryFeatures(query);
-                            totalCount += results.features.reduce((total, feature) => 
-                                total + (feature.attributes.mLength || 0), 0) / 1000;
-                        } else {
-                            totalCount += await sublayer.queryFeatureCount();
-                        }
-                    }
-                }
-            }
-            if (layer.layers) {
-                for (const sublayer of layer.layers) {
-                    await processLayer(sublayer);
-                }
-            }
+// Calculates the sum of all individual sublayer counts stored in sublayerIndividualCounts for a given parent layer
+function calculateTotalFromTrackedSublayers(parentLayerTitle) {
+    let total = 0;
+    const currentSublayerMap = sublayerIndividualCounts.get(parentLayerTitle);
+    if (currentSublayerMap) {
+        for (const count of currentSublayerMap.values()) {
+            total += count;
         }
     }
+    return total;
+}
 
-    await processLayer(parentLayer);
-    return totalCount;
-}
-// Modify the visibility watchers to use debounce
-function setupSubtypeGroupWatcher(subtypegrouplayer, layerTitle) {
-    subtypegrouplayer.loadAll().then(() => {
-        if (subtypegrouplayer.sublayers) {
-            subtypegrouplayer.sublayers.forEach((sublayer) => {
-                const debouncedUpdate = debounce(async () => {
-                    await updateLegendCount(sublayer, layerTitle, 0);
-                }, 300);
-                
-                sublayer.watch("visible", debouncedUpdate);
-            });
-        }
-    });
-}
-function setupNestedLayerWatcher(subtypegrouplayer, layerTitle) {
-    subtypegrouplayer.loadAll().then(() => {
-        subtypegrouplayer.layers.forEach((nestedSubtypeGroup) => {
-            nestedSubtypeGroup.loadAll().then(() => {
-                if (nestedSubtypeGroup.sublayers) {
-                    nestedSubtypeGroup.sublayers.forEach((nestedSublayer) => {
-                        let nestedSublayerCount = 0;
-                        nestedSublayer.watch("visible", async () => {
-                            await updateLegendCount(nestedSublayer, layerTitle, nestedSublayerCount);
-                        });
-                    });
-                }
-            });
-        });
-    });
-}
-function setupWaterMainsWatcher(subtypegrouplayer, layerTitle) {
-    subtypegrouplayer.loadAll().then(() => {
-        subtypegrouplayer.layers.forEach((nestedSubtypeGroup) => {
-            nestedSubtypeGroup.loadAll().then(() => {
-                if (nestedSubtypeGroup.sublayers) {
-                    nestedSubtypeGroup.sublayers.forEach((nestedSublayer) => {
-                        nestedSublayer.currentCount = 0;
-                        nestedSublayer.watch("visible", async () => {
-                            await updateLegendCount(nestedSublayer, layerTitle, nestedSublayer.currentCount);
-                        });
-                    });
-                }
-            });
-        });
-    });
-}
-function resetLegendCounts() {
-    legendData.forEach(item => {
-        item.count = "#";
-        const countElement = document.getElementById(item.feature.replace(/\s+/g, "") + "Count");
-        if (countElement) {
-            countElement.textContent = "#";
-        }
-    });
-}
-// Improve the setup of watchers
+
+
+// Simplified function to count sublayers and update legend
 function setupLegendCountWatchers() {
-    displayMap.layers.forEach((layer) => {
-        if (layer.type === "group") {
-            layer.when(() => {
-                // Watch the main group layer visibility
-                layer.watch("visible", async (visible) => {
-                    if (!visible) {
-                        // Reset counts when group is hidden
-                        const matchingLegendItem = legendData.find(item => item.feature === layer.title);
-                        if (matchingLegendItem) {
-                            const countElement = document.getElementById(
-                                matchingLegendItem.feature.replace(/\s+/g, "") + "Count"
-                            );
-                            if (countElement) {
-                                countElement.textContent = "#";
-                            }
-                        }
-                    }
-                });
-
-                if (layer.layers) {
-                    layer.layers.forEach((subtypegrouplayer) => {
-                        if (subtypegrouplayer.type === "subtype-group") {
-                            setupSubtypeGroupWatcher(subtypegrouplayer, layer.title);
-                        } else {
-                            if (layer.title === "Water Mains") {
-                                setupWaterMainsWatcher(subtypegrouplayer, layer.title);
-                            } else {
-                                setupNestedLayerWatcher(subtypegrouplayer, layer.title);
-                            }
-                        }
-                    });
-                }
-            });
-        }
+  const watchHandles = [];
+  
+  // Process each parent layer
+  view.map.layers.forEach(parentLayer => {
+    if (parentLayer.type !== "group") return;
+    
+    const layerTitle = parentLayer.title;
+    const legendItem = legendData.find(item => item.feature === layerTitle);
+    if (!legendItem) return;
+    
+    const countUnit = legendItem.unit;
+    const isWaterMains = layerTitle === "Water Mains";
+    
+    // Initialize count tracking for this layer
+    if (!sublayerCounts.has(layerTitle)) {
+      sublayerCounts.set(layerTitle, new Map());
+    }
+    
+    // Watch parent layer visibility
+    const parentHandle = parentLayer.watch("visible", visible => {
+      if (!visible) {
+        // Clear all counts when parent is hidden
+        sublayerCounts.get(layerTitle).clear();
+        updateCount(layerTitle, 0, countUnit);
+      } else {
+        // Parent turned on - count existing visible sublayers
+        scanVisibleSublayers();
+      }
     });
+    
+    watchHandles.push(parentHandle);
+    
+    // Function to scan and count all visible sublayers
+    function scanVisibleSublayers() {
+      showCounting(layerTitle);
+      
+      // First clear existing counts to avoid stale data
+      sublayerCounts.get(layerTitle).clear();
+      
+      let hasCountedAnything = false;
+      
+      // Find all subtype-group layers
+      function findSubtypeGroups(layer, callback) {
+        if (!layer) return;
+        
+        if (layer.type === "subtype-group") {
+          callback(layer);
+        } else if (layer.layers) {
+          layer.layers.forEach(childLayer => {
+            findSubtypeGroups(childLayer, callback);
+          });
+        }
+      }
+      
+      // Find and set up watchers for all subtype groups
+      findSubtypeGroups(parentLayer, subtypeGroup => {
+        // Set up a watch on the subtype group
+        const groupHandle = subtypeGroup.watch("visible", async visible => {
+          if (!parentLayer.visible) return;
+          
+          showCounting(layerTitle);
+          
+          if (!visible) {
+            // When group is turned off, remove all its sublayer counts
+            if (subtypeGroup.sublayers) {
+              let hasRemovedCounts = false;
+              
+              subtypeGroup.sublayers.forEach(sublayer => {
+                const sublayerId = `${subtypeGroup.id}_${sublayer.id}`;
+                if (sublayerCounts.get(layerTitle).has(sublayerId)) {
+                  sublayerCounts.get(layerTitle).delete(sublayerId);
+                  hasRemovedCounts = true;
+                }
+              });
+              
+              if (hasRemovedCounts) {
+                // Calculate and update the total
+                updateTotalCount();
+              }
+            }
+          } else {
+            // When group is turned on, count its visible sublayers
+            await countSubtypeGroupSublayers(subtypeGroup);
+          }
+        });
+        
+        watchHandles.push(groupHandle);
+        
+        // Set up watches for individual sublayers
+        if (subtypeGroup.sublayers) {
+          subtypeGroup.sublayers.forEach(sublayer => {
+            const sublayerHandle = sublayer.watch("visible", async visible => {
+              if (!parentLayer.visible || !subtypeGroup.visible) return;
+              
+              const sublayerId = `${subtypeGroup.id}_${sublayer.id}`;
+              
+              showCounting(layerTitle);
+              
+              if (visible) {
+                // Count this individual sublayer
+                try {
+                  let count;
+                  
+                  if (isWaterMains) {
+                    // For Water Mains, calculate length
+                    const query = {
+                      where: "1=1",
+                      outFields: ["mLength"],
+                      returnGeometry: false,
+                      outStatistics: [{
+                        statisticType: "sum",
+                        onStatisticField: "mLength",
+                        outStatisticFieldName: "totalLength"
+                      }]
+                    };
+                    
+                    const result = await sublayer.queryFeatures(query);
+                    count = result.features.length > 0 ? 
+                      (result.features[0].attributes.totalLength || 0) / 1000 : 0;
+                  } else {
+                    // For other layers, count features
+                    count = await sublayer.queryFeatureCount();
+                  }
+                  
+                  sublayerCounts.get(layerTitle).set(sublayerId, count);
+                  
+                  // Update the total
+                  updateTotalCount();
+                } catch (error) {
+                  console.warn(`Error counting sublayer:`, error);
+                  updateTotalCount();
+                }
+              } else {
+                // Remove this sublayer's count
+                sublayerCounts.get(layerTitle).delete(sublayerId);
+                
+                // Update the total
+                updateTotalCount();
+              }
+            });
+            
+            watchHandles.push(sublayerHandle);
+            
+            // If sublayer is already visible, count it
+            if (sublayer.visible && subtypeGroup.visible && parentLayer.visible) {
+              hasCountedAnything = true;
+              
+              const sublayerId = `${subtypeGroup.id}_${sublayer.id}`;
+              
+              // Use a timeout to avoid blocking the UI
+              setTimeout(async () => {
+                try {
+                  let count;
+                  
+                  if (isWaterMains) {
+                    // For Water Mains, calculate length
+                    const query = {
+                      where: "1=1",
+                      outFields: ["mLength"],
+                      returnGeometry: false,
+                      outStatistics: [{
+                        statisticType: "sum",
+                        onStatisticField: "mLength",
+                        outStatisticFieldName: "totalLength"
+                      }]
+                    };
+                    
+                    const result = await sublayer.queryFeatures(query);
+                    count = result.features.length > 0 ? 
+                      (result.features[0].attributes.totalLength || 0) / 1000 : 0;
+                  } else {
+                    // For other layers, count features
+                    count = await sublayer.queryFeatureCount();
+                  }
+                  
+                  sublayerCounts.get(layerTitle).set(sublayerId, count);
+                  
+                  // Update the total
+                  updateTotalCount();
+                } catch (error) {
+                  console.warn(`Error counting initial sublayer:`, error);
+                  updateTotalCount();
+                }
+              }, 0);
+            }
+          });
+        }
+      });
+      
+      // If nothing was counted, update with 0
+      if (!hasCountedAnything) {
+        updateCount(layerTitle, 0, countUnit);
+      }
+    }
+    
+    // Helper to count all visible sublayers in a subtype group
+    async function countSubtypeGroupSublayers(subtypeGroup) {
+      if (!subtypeGroup.sublayers) return;
+      
+      let hasVisibleSublayers = false;
+      
+      // Count each visible sublayer
+      for (const sublayer of subtypeGroup.sublayers.toArray()) {
+        if (sublayer.visible) {
+          hasVisibleSublayers = true;
+          
+          const sublayerId = `${subtypeGroup.id}_${sublayer.id}`;
+          
+          try {
+            let count;
+            
+            if (isWaterMains) {
+              // For Water Mains, calculate length
+              const query = {
+                where: "1=1",
+                outFields: ["mLength"],
+                returnGeometry: false,
+                outStatistics: [{
+                  statisticType: "sum",
+                  onStatisticField: "mLength",
+                  outStatisticFieldName: "totalLength"
+                }]
+              };
+              
+              const result = await sublayer.queryFeatures(query);
+              count = result.features.length > 0 ? 
+                (result.features[0].attributes.totalLength || 0) / 1000 : 0;
+            } else {
+              // For other layers, count features
+              count = await sublayer.queryFeatureCount();
+            }
+            
+            sublayerCounts.get(layerTitle).set(sublayerId, count);
+          } catch (error) {
+            console.warn(`Error counting sublayer:`, error);
+          }
+        }
+      }
+      
+      // Update the total
+      if (hasVisibleSublayers) {
+        updateTotalCount();
+      }
+    }
+    
+    // Function to calculate and update the total count
+    function updateTotalCount() {
+      let total = 0;
+      
+      for (const count of sublayerCounts.get(layerTitle).values()) {
+        total += count;
+      }
+      
+      updateCount(layerTitle, total, countUnit);
+    }
+    
+    // If parent layer is already visible, scan for visible sublayers
+    if (parentLayer.visible) {
+      // Use a timeout to ensure the layer is fully loaded
+      setTimeout(() => {
+        scanVisibleSublayers();
+      }, 100);
+    }
+  });
+  
+  // Return cleanup function
+  return {
+    remove: () => {
+      watchHandles.forEach(handle => {
+        if (handle && typeof handle.remove === 'function') {
+          handle.remove();
+        }
+      });
+    }
+  };
 }
-// Add a debounce function to prevent too frequent updates
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+
+
+// Optimized counting function with more efficient approach
+async function getOptimizedCount(parentLayer, isWaterMains = false) {
+  if (!parentLayer || !parentLayer.visible) return 0;
+  
+  // For Water Mains, we need to calculate length
+  if (isWaterMains) {
+    return getWaterMainsLength(parentLayer);
+  }
+  
+  // For other layers, count features efficiently
+  return getFeatureCount(parentLayer);
 }
+
+// Function to get feature count with optimizations
+async function getFeatureCount(layer) {
+  if (!layer || !layer.visible) return 0;
+  
+  let totalCount = 0;
+  
+  // If it's a subtype-group layer with visible sublayers
+  if (layer.type === "subtype-group" && layer.sublayers) {
+    // Try to query the whole layer first if possible
+    try {
+      return await layer.queryFeatureCount();
+    } catch (error) {
+      console.warn("Fallback to sublayer counting for", layer.title);
+      
+      // Fall back to querying visible sublayers
+      for (const sublayer of layer.sublayers.toArray()) {
+        if (sublayer.visible) {
+          try {
+            const count = await sublayer.queryFeatureCount();
+            totalCount += count;
+          } catch (error) {
+            console.warn(`Error counting sublayer:`, error);
+          }
+        }
+      }
+    }
+  } 
+  // For group layers, process children
+  else if (layer.layers) {
+    for (const childLayer of layer.layers.toArray()) {
+      if (childLayer.visible) {
+        totalCount += await getFeatureCount(childLayer);
+      }
+    }
+  }
+  
+  return totalCount;
+}
+
+// Special handling for Water Mains to calculate length
+async function getWaterMainsLength(layer) {
+  if (!layer || !layer.visible) return 0;
+  
+  let totalLength = 0;
+  
+  // If it's a subtype-group with visible sublayers
+  if (layer.type === "subtype-group" && layer.sublayers) {
+    // Try to query the whole layer first
+    try {
+      const query = {
+        where: "1=1",
+        outFields: ["mLength"],
+        returnGeometry: false,
+        outStatistics: [{
+          statisticType: "sum",
+          onStatisticField: "mLength",
+          outStatisticFieldName: "totalLength"
+        }]
+      };
+      
+      const result = await layer.queryFeatures(query);
+      if (result.features.length > 0) {
+        return (result.features[0].attributes.totalLength || 0) / 1000; // m to km
+      }
+    } catch (error) {
+      console.warn("Fallback to sublayer length calculation for", layer.title);
+      
+      // Fall back to querying visible sublayers
+      for (const sublayer of layer.sublayers.toArray()) {
+        if (sublayer.visible) {
+          try {
+            const query = {
+              where: "1=1",
+              outFields: ["mLength"],
+              returnGeometry: false,
+              outStatistics: [{
+                statisticType: "sum",
+                onStatisticField: "mLength",
+                outStatisticFieldName: "totalLength"
+              }]
+            };
+            
+            const result = await sublayer.queryFeatures(query);
+            if (result.features.length > 0) {
+              totalLength += (result.features[0].attributes.totalLength || 0);
+            }
+          } catch (error) {
+            console.warn(`Error calculating length:`, error);
+          }
+        }
+      }
+    }
+  } 
+  // For group layers, process children
+  else if (layer.layers) {
+    for (const childLayer of layer.layers.toArray()) {
+      if (childLayer.visible) {
+        totalLength += await getWaterMainsLength(childLayer);
+      }
+    }
+  }
+  
+  return totalLength / 1000; // Convert meters to kilometers
+}
+
+
+/**
+ * Resets all legend counts to the initial state.
+ * Call this function when loading new regions before setting up new counts.
+ */
+function resetLegendCounts() {
+  // Clear all stored counts from tracking maps
+  sublayerCounts.clear();
+  countCache.clear();
+  sublayerIndividualCounts.clear();
+  
+  // Clear any pending animations or queries
+  pendingAnimations.forEach(intervalId => clearInterval(intervalId));
+  pendingAnimations.clear();
+  
+  pendingQueries.forEach(query => {
+    if (query.timeoutId) clearTimeout(query.timeoutId);
+  });
+  pendingQueries.clear();
+  
+  // Reset all legend elements to "#"
+  legendData.forEach(item => {
+    const countId = item.feature.replace(/\s+/g, "") + "Count";
+    const element = document.getElementById(countId);
+    if (element) {
+      element.textContent = "#";
+      element.style.fontWeight = "bold";
+    }
+  });
+  
+  console.log("Legend counts reset completed");
+}
+
+
+
 
 
 const labelClassDMZBoundaries = {
@@ -4063,6 +4303,10 @@ async function displayLayers() {
         title: "Kota Belud",
       },
       {
+        url: "https://services9.arcgis.com/O3obYY4143cgu5Lt/arcgis/rest/services/DMZ_Boundaries_KotaKinabalu_Updated/FeatureServer/296",
+        title: "Kota Kinabalu",
+      },
+      {
         url: "https://services9.arcgis.com/O3obYY4143cgu5Lt/arcgis/rest/services/DMZ_Boundaries_KotaMarudu/FeatureServer/341",
         title: "Kota Marudu",
       },
@@ -4081,10 +4325,6 @@ async function displayLayers() {
       {
         url: "https://services9.arcgis.com/O3obYY4143cgu5Lt/arcgis/rest/services/DMZ_Boundaries_Tawau/FeatureServer/631",
         title: "Tawau",
-      },
-      {
-        url: "https://services9.arcgis.com/O3obYY4143cgu5Lt/arcgis/rest/services/DMZ_Boundaries_KotaKinabalu_Updated/FeatureServer/296",
-        title: "Kota Kinabalu",
       },
       // { url: "", title: "" },
     ];
@@ -4963,37 +5203,37 @@ async function displayLayers() {
       visible: false, // Hide all sublayers initially
     });
 
-    // DMZBoundaries Layers
-    // Create SubtypeGroupLayers for DMZBoundaries
-    const subtypeGroupLayersDMZBoundaries = layersDMZBoundaries.map(
-      (layerInfo) => {
-        const layer = new SubtypeGroupLayer({
-          url: layerInfo.url,
-          visible: false, // Hide all sublayers initially
-          title: layerInfo.title,
-          outFields: ["*"], // Ensure all fields are available for the popup
-          // popupTemplate: popupTemplateCustomerLocations
-        });
+    // // DMZBoundaries Layers
+    // // Create SubtypeGroupLayers for DMZBoundaries
+    // const subtypeGroupLayersDMZBoundaries = layersDMZBoundaries.map(
+    //   (layerInfo) => {
+    //     const layer = new SubtypeGroupLayer({
+    //       url: layerInfo.url,
+    //       visible: false, // Hide all sublayers initially
+    //       title: layerInfo.title,
+    //       outFields: ["*"], // Ensure all fields are available for the popup
+    //       // popupTemplate: popupTemplateCustomerLocations
+    //     });
 
-        // Apply the renderer to each sublayer
-        layer.when(() => {
-          layer.sublayers.forEach((sublayer) => {
-            sublayer.visible = false;
-            sublayer.renderer.symbol.color.a = 0.3;
-            sublayer.renderer.symbol.outline.width = 1;
-            sublayer.labelingInfo = [labelClassDMZBoundariesNamesOnly];
-            sublayer.labelsVisible = false;
-            sublayer.popupTemplate = popupTemplateDMZBoundaries;
-          });
-        });
-        return layer;
-      }
-    );
-    const DMZBoundaries = new GroupLayer({
-      title: "DMZ Boundaries",
-      layers: subtypeGroupLayersDMZBoundaries,
-      visible: false, // Hide all sublayers initially
-    });
+    //     // Apply the renderer to each sublayer
+    //     layer.when(() => {
+    //       layer.sublayers.forEach((sublayer) => {
+    //         sublayer.visible = false;
+    //         sublayer.renderer.symbol.color.a = 0.3;
+    //         sublayer.renderer.symbol.outline.width = 1;
+    //         sublayer.labelingInfo = [labelClassDMZBoundariesNamesOnly];
+    //         sublayer.labelsVisible = false;
+    //         sublayer.popupTemplate = popupTemplateDMZBoundaries;
+    //       });
+    //     });
+    //     return layer;
+    //   }
+    // );
+    // const DMZBoundaries = new GroupLayer({
+    //   title: "DMZ Boundaries",
+    //   layers: subtypeGroupLayersDMZBoundaries,
+    //   visible: false, // Hide all sublayers initially
+    // });
 
     // DMZMeterPoints Layers
     // Create SubtypeGroupLayers for DMZMeterPoints
@@ -14130,23 +14370,22 @@ async function addWidgets() {
     // ];
 
     // Function to create the legend
-    function createLegend(legendData) {
-      const legendContainer = document.getElementById("legendContainer");
-      legendContainer.innerHTML = ""; // Clear existing content
+// Function to create the legend
+function createLegend(legendData) {
+  const legendContainer = document.getElementById("legendContainer");
+  legendContainer.innerHTML = "";
 
-      legendData.forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "legend-item";
-        row.innerHTML = `
-              <img src="${item.icon}" alt="${item.feature}">
-              ${item.feature} <span id="${item.feature.replace(
-          /\s+/g,
-          ""
-        )}Count" style="font-weight: bold;">${item.count}</span>
-          `;
-        legendContainer.appendChild(row);
-      });
-    }
+  legendData.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "legend-item";
+    row.innerHTML = `
+      <img src="${item.icon}" alt="${item.feature}" />
+      ${item.feature} <span id="${item.feature.replace(/\s+/g, "")}Count" 
+      class="count-value" data-unit="${item.unit}">#</span>
+    `;
+    legendContainer.appendChild(row);
+  });
+}
 
     // // Function to update the count of displayed features
     // function updateFeatureCount(featureName, count) {
@@ -14391,16 +14630,21 @@ async function addWidgets() {
     // });
 
     // Add this after creating the legend
-    function initializeLegend() {
-        legendData.forEach(item => {
-            const countElement = document.getElementById(
-                item.feature.replace(/\s+/g, "") + "Count"
-            );
-            if (countElement) {
-                countElement.textContent = "#";
-            }
-        });
+// Initialize legend with # for all counts
+
+
+
+
+function initializeLegend() {
+  legendData.forEach(item => {
+    const countElement = document.getElementById(
+      item.feature.replace(/\s+/g, "") + "Count"
+    );
+    if (countElement) {
+      countElement.textContent = "#";
     }
+  });
+}
 
 
 
